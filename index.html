@@ -1,0 +1,432 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Room Display</title>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@200;400;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    /* ── BASE STYLES ── */
+    body {
+      margin: 0;
+      width: 100vw;
+      height: 100vh;
+      overflow: hidden;
+      background: linear-gradient(140deg, #070d1a 0%, #0d1b30 55%, #070d1a 100%);
+      font-family: 'DM Sans', 'Segoe UI', sans-serif;
+      color: #e2e8f0;
+      display: flex;
+      flex-direction: column;
+      position: relative;
+    }
+    
+    * {
+      box-sizing: border-box;
+    }
+
+    /* ── BACKGROUND DECORATIONS ── */
+    .bg-grid {
+      position: absolute; inset: 0; pointer-events: none;
+      background-image: linear-gradient(rgba(148,163,184,0.025) 1px, transparent 1px), linear-gradient(90deg, rgba(148,163,184,0.025) 1px, transparent 1px);
+      background-size: 52px 52px;
+    }
+    .bg-blob-1 {
+      position: absolute; top: -180px; left: -80px; width: 480px; height: 480px; border-radius: 50%;
+      background: radial-gradient(circle, rgba(59,130,246,0.09) 0%, transparent 65%); pointer-events: none;
+    }
+    .bg-blob-2 {
+      position: absolute; bottom: -120px; right: -60px; width: 380px; height: 380px; border-radius: 50%;
+      background: radial-gradient(circle, rgba(139,92,246,0.08) 0%, transparent 65%); pointer-events: none;
+    }
+
+    /* ── LAYOUT ── */
+    .header {
+      display: flex; align-items: center; justify-content: space-between; padding: 16px 28px;
+      flex-shrink: 0; border-bottom: 1px solid rgba(255,255,255,0.07); position: relative; z-index: 2;
+    }
+    .main-grid {
+      flex: 1; display: grid; grid-template-columns: 1fr 340px; gap: 14px; padding: 14px;
+      overflow: hidden; min-height: 0; position: relative; z-index: 1;
+    }
+    .col {
+      display: flex; flex-direction: column; gap: 14px; overflow: hidden; min-height: 0;
+    }
+    .panel {
+      background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.07);
+      border-radius: 14px; padding: 16px 20px; flex-shrink: 0;
+    }
+    .panel-flex {
+      flex: 1; display: flex; flex-direction: column; min-height: 0; overflow: hidden;
+    }
+
+    /* ── COMPONENTS ── */
+    .btn-primary {
+      padding: 12px 22px; border-radius: 10px; border: none; cursor: pointer;
+      background: linear-gradient(135deg, #3b82f6, #6366f1); color: #fff; font-weight: 700;
+      font-size: 15px; white-space: nowrap; box-shadow: 0 4px 16px rgba(99,102,241,0.4);
+    }
+    
+    .status-block {
+      border-radius: 16px; padding: 28px 32px; flex-shrink: 0; display: flex;
+      align-items: center; justify-content: space-between; gap: 24px; transition: all 0.3s ease;
+    }
+    
+    .timeline-container { position: relative; height: 36px; background: rgba(10,18,32,0.8); border-radius: 8px; overflow: hidden; }
+    .timeline-tick { position: absolute; top: 0; bottom: 0; width: 1px; background: rgba(148,163,184,0.06); }
+    .timeline-meeting { position: absolute; top: 4px; bottom: 4px; border-radius: 4px; opacity: 0.9; display: flex; align-items: center; overflow: hidden; padding-left: 6px; min-width: 4px; }
+    .timeline-now { position: absolute; top: -4px; bottom: -4px; width: 2px; background: #f43f5e; z-index: 10; box-shadow: 0 0 8px rgba(244,63,94,0.9); transition: left 1s linear;}
+    
+    .schedule-list { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; }
+    .meeting-item {
+      display: flex; align-items: stretch; gap: 12px; padding: 12px 14px; border-radius: 10px;
+      position: relative; overflow: hidden; flex-shrink: 0;
+    }
+    .meeting-live-bar { position: absolute; left: 0; bottom: 0; height: 2px; transition: width 1s linear; }
+    .del-btn { background: none; border: none; cursor: pointer; color: #2d3f52; font-size: 15px; padding: 0; flex-shrink: 0; align-self: flex-start; line-height: 1; }
+    .del-btn:hover { color: #f87171; }
+
+    /* ── MODAL ── */
+    .modal-overlay {
+      position: fixed; inset: 0; background: rgba(0,0,0,0.75); display: none;
+      align-items: center; justify-content: center; z-index: 100; backdrop-filter: blur(8px);
+    }
+    .modal-content {
+      background: #0d1b2e; border: 1px solid rgba(148,163,184,0.15); border-radius: 20px;
+      padding: 30px; width: 460px; max-width: 90vw; box-shadow: 0 28px 70px rgba(0,0,0,0.7);
+    }
+    .modal-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+    .input-field {
+      width: 100%; padding: 11px 12px; border-radius: 9px; background: rgba(8,14,26,0.9);
+      border: 1px solid rgba(148,163,184,0.12); color: #e2e8f0; font-size: 14px; outline: none; box-sizing: border-box; color-scheme: dark;
+    }
+
+    /* Utility Classes */
+    .fw-600 { font-weight: 600; color: #94a3b8; }
+    .d-none { display: none !important; }
+  </style>
+</head>
+<body>
+
+  <div class="bg-grid"></div>
+  <div class="bg-blob-1"></div>
+  <div class="bg-blob-2"></div>
+
+  <!-- ── HEADER ── -->
+  <div class="header">
+    <div>
+      <div style="font-size: 22px; font-weight: 700; color: #f1f5f9; letter-spacing: -0.4px; line-height: 1.1;" id="roomFull"></div>
+      <div style="font-size: 13px; color: #475569; margin-top: 3px;" id="roomSub"></div>
+    </div>
+    <div style="display: flex; align-items: center; gap: 20px;">
+      <span id="okMsg" class="d-none" style="font-size: 13px; color: #34d399; background: rgba(16,185,129,0.12); padding: 5px 12px; border-radius: 20px; border: 1px solid rgba(16,185,129,0.25);"> ✓ Reservation confirmed</span>
+      <div style="text-align: right;">
+        <div id="clockStr" style="font-size: 34px; font-weight: 200; letter-spacing: -1.5px; color: #f1f5f9; line-height: 1; font-variant-numeric: tabular-nums;"></div>
+      </div>
+      <button onclick="openModal()" class="btn-primary">+ Reserve Room</button>
+    </div>
+  </div>
+
+  <!-- ── BODY ── -->
+  <div class="main-grid">
+    <!-- LEFT -->
+    <div class="col">
+      <!-- BIG STATUS BLOCK -->
+      <div id="statusBlock" class="status-block">
+        <div>
+          <div id="statusTitle" style="font-size: 56px; font-weight: 800; letter-spacing: -1px; line-height: 1;"></div>
+          <div id="statusSub" style="font-size: 17px; color: #64748b; margin-top: 8px; font-weight: 400;"></div>
+        </div>
+        <div style="text-align: right; flex-shrink: 0;">
+          <div style="font-size: 13px; color: #475569; margin-bottom: 4px; text-transform: uppercase; letter-spacing: 0.08em;">Capacity</div>
+          <div id="capacityNum" style="font-size: 48px; font-weight: 700; color: #f1f5f9; line-height: 1;"></div>
+          <div style="font-size: 13px; color: #475569; margin-top: 2px;">people</div>
+        </div>
+      </div>
+
+      <!-- TIMELINE -->
+      <div class="panel">
+        <div style="font-size: 11px; font-weight: 600; color: #475569; text-transform: uppercase; letter-spacing: 0.12em; margin-bottom: 10px;">Today · 8 AM – 8 PM</div>
+        <div id="timelineHours" style="display: flex; justify-content: space-between; margin-bottom: 5px;"></div>
+        <div id="timelineBlocks" class="timeline-container"></div>
+      </div>
+
+      <!-- SCHEDULE LIST -->
+      <div class="panel panel-flex" style="padding-bottom:10px;">
+        <div id="scheduleHeader" style="font-size: 11px; font-weight: 600; color: #475569; text-transform: uppercase; letter-spacing: 0.12em; margin-bottom: 12px; flex-shrink: 0;"></div>
+        <div id="scheduleList" class="schedule-list"></div>
+      </div>
+    </div>
+
+    <!-- RIGHT: Outlook -->
+    <div class="col">
+      <div class="panel panel-flex" style="padding: 22px;">
+        <div style="font-size: 11px; font-weight: 600; color: #475569; text-transform: uppercase; letter-spacing: 0.12em; margin-bottom: 18px; flex-shrink: 0;">Outlook Calendar</div>
+        <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 18px; flex-shrink: 0;">
+          <div style="width: 44px; height: 44px; border-radius: 10px; background: #0078d4; display: flex; align-items: center; justify-content: center; font-size: 22px; flex-shrink: 0;">📆</div>
+          <div>
+            <div style="font-size: 17px; font-weight: 700; color: #e2e8f0; line-height: 1;">Microsoft 365</div>
+            <div style="font-size: 12px; color: #64748b; margin-top: 2px;">Calendar integration</div>
+          </div>
+        </div>
+        
+        <div style="display: flex; flex-direction: column; gap: 10px; margin-bottom: 22px; flex-shrink: 0;" id="outlookFeatures">
+           <!-- Features injected via JS to keep HTML clean -->
+        </div>
+
+        <button onclick="alert('Outlook Setup:\n\n1. Register an app in Azure Active Directory\n2. Grant Calendar.ReadWrite + Place.Read.All permissions\n3. Use Microsoft Graph API /me/events endpoint\n\nDocs: https://learn.microsoft.com/graph/api/user-post-events')" 
+          style="width: 100%; padding: 13px; border-radius: 10px; border: none; cursor: pointer; background: #0078d4; color: #fff; font-weight: 700; font-size: 14px; flex-shrink: 0; margin-top: auto;">
+          Connect Microsoft 365
+        </button>
+        <p style="font-size: 10px; color: #2d3f52; margin: 10px 0 0; line-height: 1.5; flex-shrink: 0;">
+          Requires Azure AD app registration and IT approval for Calendar.ReadWrite + Place.Read.All permissions.
+        </p>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── RESERVE MODAL ── -->
+  <div id="modalOverlay" class="modal-overlay">
+    <div class="modal-content">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 22px;">
+        <h2 id="modalTitle" style="font-size: 18px; font-weight: 700; color: #f1f5f9; margin: 0;"></h2>
+        <button onclick="closeModal()" style="background: rgba(255,255,255,0.07); border: none; border-radius: 7px; color: #94a3b8; cursor: pointer; font-size: 15px; padding: 5px 11px; line-height: 1;">✕</button>
+      </div>
+      
+      <div class="modal-grid">
+        <label style="grid-column: span 2;">
+          <span style="font-size: 11px; color: #64748b; display: block; margin-bottom: 5px; letter-spacing: 0.04em;">Meeting Title</span>
+          <input type="text" id="f_title" class="input-field" placeholder="e.g. Q3 Planning"/>
+        </label>
+        <label style="grid-column: span 2;">
+          <span style="font-size: 11px; color: #64748b; display: block; margin-bottom: 5px; letter-spacing: 0.04em;">Organizer</span>
+          <input type="text" id="f_organizer" class="input-field" placeholder="Your name"/>
+        </label>
+        <label style="grid-column: span 1;">
+          <span style="font-size: 11px; color: #64748b; display: block; margin-bottom: 5px; letter-spacing: 0.04em;">Start Time</span>
+          <input type="time" id="f_start" class="input-field"/>
+        </label>
+        <label style="grid-column: span 1;">
+          <span style="font-size: 11px; color: #64748b; display: block; margin-bottom: 5px; letter-spacing: 0.04em;">End Time</span>
+          <input type="time" id="f_end" class="input-field"/>
+        </label>
+        <label style="grid-column: span 1;">
+          <span id="attendeeLabel" style="font-size: 11px; color: #64748b; display: block; margin-bottom: 5px; letter-spacing: 0.04em;"></span>
+          <input type="number" id="f_attendees" class="input-field" min="1" value="2"/>
+        </label>
+      </div>
+
+      <p id="formErr" style="color: #f87171; font-size: 12px; margin: 12px 0 0;" class="d-none"></p>
+      
+      <div style="display: flex; gap: 10px; margin-top: 20px;">
+        <button onclick="reserve()" style="flex: 1; padding: 12px; border-radius: 10px; border: none; cursor: pointer; background: linear-gradient(135deg, #3b82f6, #6366f1); color: #fff; font-weight: 700; font-size: 14px;">Confirm Reservation</button>
+        <button onclick="closeModal()" style="padding: 12px 16px; border-radius: 10px; cursor: pointer; background: rgba(148,163,184,0.08); border: 1px solid rgba(148,163,184,0.12); color: #94a3b8; font-weight: 600; font-size: 13px;">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── JAVASCRIPT LOGIC ── -->
+  <script>
+    // Constants & Utilities
+    const ROOM = { full: "Horizon Conference Room", capacity: 12, floor: "4th Floor" };
+    const COLORS = ["#3b82f6","#8b5cf6","#0ea5e9","#10b981","#f59e0b","#ef4444","#ec4899","#14b8a6"];
+    const gid = () => Math.random().toString(36).slice(2,9);
+    const pad = (n) => String(n).padStart(2,"0");
+    const toMins = (t) => { const [h,m] = t.split(":").map(Number); return h * 60 + m; };
+    const toDisplay = (m) => { const h = Math.floor(m / 60) % 24, mn = m % 60, ap = h >= 12 ? "PM" : "AM", hh = h % 12 || 12; return `${hh}:${pad(mn)} ${ap}`; };
+    const fmtDate = (d) => d.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" });
+
+    const TL_START = 8 * 60, TL_END = 20 * 60, TL_RANGE = TL_END - TL_START;
+    const tlPct = (m) => `${((m - TL_START) / TL_RANGE) * 100}%`;
+    const HOURS = Array.from({length: 13}, (_, i) => i + 8);
+
+    // Initial State
+    let meetings = [
+      {id:gid(), title:"Product Roadmap Review", organizer:"Sarah Mitchell", attendees:8, start:"09:00", end:"10:00", color:"#3b82f6"},
+      {id:gid(), title:"Engineering Standup", organizer:"James Park", attendees:6, start:"10:30", end:"11:00", color:"#8b5cf6"},
+      {id:gid(), title:"Client Presentation — Orion Inc.", organizer:"Elena Vasquez", attendees:10, start:"13:00", end:"14:30", color:"#0ea5e9"},
+      {id:gid(), title:"UX Design Sprint", organizer:"Mia Chen", attendees:5, start:"15:00", end:"17:00", color:"#10b981"},
+    ];
+
+    // Static Init
+    document.getElementById("roomFull").textContent = ROOM.full;
+    document.getElementById("capacityNum").textContent = ROOM.capacity;
+    document.getElementById("modalTitle").textContent = `Reserve ${ROOM.full}`;
+    document.getElementById("attendeeLabel").textContent = `Attendees (max ${ROOM.capacity})`;
+    document.getElementById("f_attendees").max = ROOM.capacity;
+
+    // Build Outlook Features
+    const outlookFeaturesHTML = [
+        ["Auto-sync bookings to Outlook","Reservations made here appear instantly in your Outlook calendar."],
+        ["Send invites to attendees","Attendees receive calendar invites automatically when a room is booked."],
+        ["Block Exchange resource","Prevents double-booking via the Exchange room resource calendar."],
+        ["Meeting reminders","Attendees get notified before their meeting starts."]
+    ].map(([title, desc]) => `
+      <div style="display:flex; gap:10px; align-items:flex-start;">
+        <span style="color:#3b82f6; font-size:15px; margin-top:1px; flex-shrink:0;">✓</span>
+        <div>
+          <div style="font-size:13px; font-weight:600; color:#cbd5e1; line-height:1.2;">${title}</div>
+          <div style="font-size:11px; color:#475569; margin-top:2px; line-height:1.4;">${desc}</div>
+        </div>
+      </div>
+    `).join("");
+    document.getElementById("outlookFeatures").innerHTML = outlookFeaturesHTML;
+
+    // Render loop
+    function render() {
+      const now = new Date();
+      const nowMins = now.getHours() * 60 + now.getMinutes();
+      
+      // Top Header
+      document.getElementById("roomSub").textContent = `${ROOM.floor} · ${fmtDate(now)}`;
+      document.getElementById("clockStr").textContent = now.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: true });
+
+      const allToday = [...meetings].sort((a,b) => toMins(a.start) - toMins(b.start));
+      const current = meetings.find(m => nowMins >= toMins(m.start) && nowMins < toMins(m.end));
+      const next = allToday.filter(m => toMins(m.start) > nowMins)[0];
+      const avail = !current;
+
+      // Status Block
+      const sb = document.getElementById("statusBlock");
+      const st = document.getElementById("statusTitle");
+      const ss = document.getElementById("statusSub");
+      
+      sb.style.background = avail ? "rgba(16,185,129,0.08)" : "rgba(239,68,68,0.07)";
+      sb.style.borderColor = avail ? "rgba(16,185,129,0.25)" : "rgba(239,68,68,0.22)";
+      st.style.color = avail ? "#34d399" : "#f87171";
+      st.textContent = avail ? "Available" : "In Use";
+
+      if (avail && next) {
+        ss.innerHTML = `Next booking: <span class="fw-600">${next.title}</span> at <span class="fw-600">${toDisplay(toMins(next.start))}</span>`;
+      } else if (!avail && current) {
+        ss.innerHTML = `<span class="fw-600">${current.title}</span> · ends at <span class="fw-600">${toDisplay(toMins(current.end))}</span>`;
+      } else {
+        ss.textContent = "No further meetings scheduled today";
+      }
+
+      // Timeline
+      let tlHoursHTML = "";
+      HOURS.forEach(h => {
+        const lbl = h === 12 ? "12p" : h > 12 ? `${h-12}p` : `${h}a`;
+        tlHoursHTML += `<span style="font-size: 10px; color: #334155; flex: 1; text-align: center; font-variant-numeric: tabular-nums;">${lbl}</span>`;
+      });
+      document.getElementById("timelineHours").innerHTML = tlHoursHTML;
+
+      let tlBlocksHTML = HOURS.slice(1,-1).map(h => `<div class="timeline-tick" style="left: ${tlPct(h * 60)}"></div>`).join("");
+      
+      meetings.forEach(m => {
+        const ms = toMins(m.start), me = toMins(m.end);
+        const l = ((Math.max(ms, TL_START) - TL_START) / TL_RANGE) * 100;
+        const w = ((Math.min(me, TL_END) - Math.max(ms, TL_START)) / TL_RANGE) * 100;
+        tlBlocksHTML += `
+          <div class="timeline-meeting" style="left: ${l}%; width: ${Math.max(w, 0.4)}%; background: ${m.color};">
+            <span style="font-size: 9px; color: #fff; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${m.title}</span>
+          </div>`;
+      });
+      
+      if (nowMins >= TL_START && nowMins <= TL_END) {
+        tlBlocksHTML += `<div class="timeline-now" style="left: ${tlPct(nowMins)}"></div>`;
+      }
+      document.getElementById("timelineBlocks").innerHTML = tlBlocksHTML;
+
+      // Schedule List
+      document.getElementById("scheduleHeader").textContent = `Today's Schedule · ${allToday.length} ${allToday.length === 1 ? "meeting" : "meetings"}`;
+      
+      if (allToday.length === 0) {
+        document.getElementById("scheduleList").innerHTML = '<p style="color: #334155; font-size: 14px; margin: 0;">No meetings scheduled today.</p>';
+      } else {
+        document.getElementById("scheduleList").innerHTML = allToday.map(m => {
+          const isNow = nowMins >= toMins(m.start) && nowMins < toMins(m.end);
+          const isPast = toMins(m.end) <= nowMins;
+          const pct = isNow ? Math.round(((nowMins - toMins(m.start)) / (toMins(m.end) - toMins(m.start))) * 100) : 0;
+          
+          let bg = isNow ? "rgba(59,130,246,0.08)" : isPast ? "rgba(255,255,255,0.02)" : "rgba(10,18,32,0.5)";
+          let border = isNow ? "rgba(59,130,246,0.25)" : "rgba(255,255,255,0.05)";
+          let titleCol = isPast ? "#475569" : "#e2e8f0";
+
+          return `
+            <div class="meeting-item" style="background: ${bg}; border: 1px solid ${border}; opacity: ${isPast ? 0.45 : 1};">
+              ${isNow ? `<div class="meeting-live-bar" style="width: ${pct}%; background: ${m.color};"></div>` : ""}
+              <div style="width: 4px; border-radius: 4px; background: ${m.color}; flex-shrink: 0;"></div>
+              <div style="flex: 1; min-width: 0;">
+                <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 4px;">
+                  <span style="font-size: 15px; font-weight: 700; color: ${titleCol}; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${m.title}</span>
+                  ${isNow ? `<span style="font-size: 10px; background: rgba(16,185,129,0.2); color: #34d399; padding: 2px 7px; border-radius: 8px; font-weight: 700; flex-shrink: 0;">LIVE</span>` : ""}
+                </div>
+                <div style="font-size: 12px; color: #475569; display: flex; gap: 12px; flex-wrap: wrap;">
+                  <span>${toDisplay(toMins(m.start))} – ${toDisplay(toMins(m.end))}</span>
+                  <span>${m.organizer}</span>
+                  <span>${m.attendees} attendees</span>
+                </div>
+              </div>
+              ${!isPast ? `<button onclick="delMeeting('${m.id}')" class="del-btn">✕</button>` : ""}
+            </div>
+          `;
+        }).join("");
+      }
+    }
+
+    // Modal Actions
+    const modal = document.getElementById("modalOverlay");
+    const errObj = document.getElementById("formErr");
+
+    function openModal() {
+      errObj.classList.add("d-none");
+      modal.style.display = "flex";
+    }
+
+    function closeModal() {
+      modal.style.display = "none";
+      document.getElementById("f_title").value = "";
+      document.getElementById("f_organizer").value = "";
+      document.getElementById("f_start").value = "";
+      document.getElementById("f_end").value = "";
+      document.getElementById("f_attendees").value = "2";
+    }
+
+    function showError(msg) {
+      errObj.textContent = `⚠ ${msg}`;
+      errObj.classList.remove("d-none");
+    }
+
+    function reserve() {
+      errObj.classList.add("d-none");
+      
+      const title = document.getElementById("f_title").value.trim();
+      const organizer = document.getElementById("f_organizer").value.trim();
+      const start = document.getElementById("f_start").value;
+      const end = document.getElementById("f_end").value;
+      const attendees = Number(document.getElementById("f_attendees").value);
+
+      if(!title || !organizer || !start || !end) return showError("Please fill in all fields.");
+      
+      const s = toMins(start), e = toMins(end);
+      if(e <= s) return showError("End time must be after start.");
+      if(attendees < 1 || attendees > ROOM.capacity) return showError(`Attendees: 1–${ROOM.capacity}.`);
+      
+      const conflict = meetings.some(m => {
+        const ms = toMins(m.start), me = toMins(m.end);
+        return s < me && e > ms;
+      });
+      if(conflict) return showError("Conflicts with an existing booking.");
+
+      meetings.push({ id: gid(), title, organizer, attendees, start, end, color: COLORS[meetings.length % COLORS.length] });
+      
+      closeModal();
+      render();
+
+      const okMsg = document.getElementById("okMsg");
+      okMsg.classList.remove("d-none");
+      setTimeout(() => okMsg.classList.add("d-none"), 3500);
+    }
+
+    function delMeeting(id) {
+      meetings = meetings.filter(m => m.id !== id);
+      render();
+    }
+
+    // Start App
+    render();
+    setInterval(render, 1000);
+  </script>
+</body>
+</html>
